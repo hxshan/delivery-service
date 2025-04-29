@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { Server } from "socket.io";
 
-const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'qiwuegquwe123123bahsbd213123asdhuaisdguashd';
 
 let io;
 
@@ -17,65 +17,75 @@ const initSocketServer = (server) => {
     }
   });
 
-  // io.use((socket, next) => {
-  //   const token = socket.handshake.auth.token;
-  //   if (!token) return next(new Error("Authentication error"));
+  io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token) return next(new Error("Authentication error"));
 
-  //   try {
-  //     const payload = jwt.verify(token, ACCESS_TOKEN_SECRET);
-  //     socket.user = payload;
-  //     return next();
-  //   } catch (err) {
-  //     return next(new Error("Invalid token"));
-  //   }
-  // });
+    try {
+      // console.log(token);
+      console.log(ACCESS_TOKEN_SECRET);
+      const payload = jwt.verify(token, ACCESS_TOKEN_SECRET);
+      socket.user = payload;
+      return next();
+    } catch (err) {
+      console.log(err);
+      return next(new Error("Invalid token"));
+    }
+  });
   io.on("connection", (socket) => {
     console.log(`New client connected: ${socket.id}`);
   
-    const { id, role } = socket.user;
-    console.log(`${role} connected: ${id}`);
-    
+    const { userId, role } = socket.user;
+    console.log(`${role} connected: ${userId}`);
+
     switch (role) {
       case "customer":
-        connectedCustomers.set(id, socket.id);
+        connectedCustomers.set(userId, socket.id);
         break;
       case "driver":
-        connectedDrivers.set(id, socket.id);
+        connectedDrivers.set(userId, socket.id);
         break;
       case "restaurant":
-        connectedRestaurants.set(id, socket.id);
+        connectedRestaurants.set(userId, socket.id);
         break;
       default:
         console.log(`Unknown role: ${role}`);
     }
-  
-    socket.on("join_order", (orderId) => {
-      socket.join(`order_${orderId}`);
-      console.log(`${role} joined order ${orderId}`);
+    socket.on("user_connected", (userData) => {
+      console.log(`Received user details for ${userData.userType} ${userData.userId}`);
+      
+      // Store additional user details based on user type
+      switch (userData.userType) {
+        case "customer":
+          connectedCustomers.set(userData.userId, {
+            socketId: socket.id,
+            name: userData.name||'guest',
+            lastActive: new Date(),
+          });
+          break;
+        case "driver":
+          connectedDrivers.set(userData.userId, {
+            socketId: socket.id,
+            name: userData.name||'guest',
+            lastActive: new Date(),
+            isAvailable: true, 
+            location: null,
+          });
+          break;
+        case "restaurant":
+          connectedRestaurants.set(userData.userId, {
+            socketId: socket.id,
+            name: userData.name||'guest',
+            lastActive: new Date(),
+          });
+          break;
+      }
     });
   
-    socket.on("update_location", ({ orderId, location }) => {
-      if (role !== "driver") return;
-  
-      io.to(`order_${orderId}`).emit("driver_location_update", {
-        driverId: id,
-        location
-      });
-    });
-  
-    socket.on("delivery_completed", ({ orderId }) => {
-      if (role !== "driver") return;
-  
-      io.to(`order_${orderId}`).emit("delivery_done", {
-        orderId,
-        driverId: id
-      });
-  
-      socket.leave(`order_${orderId}`);
-    });
+ 
   
     socket.on("disconnect", () => {
-      console.log(`${role} disconnected: ${id}`);
+      console.log(`${role} disconnected: ${userId}`);
     
       switch (role) {
         case "customer":
@@ -93,43 +103,6 @@ const initSocketServer = (server) => {
 }  
 
 
-//   io.on("connection", (socket) => {
-//     const { id, role } = socket.user;
-//     console.log(`${role} connected: ${id}`);
-
-//     socket.on("join_order", (orderId) => {
-//       socket.join(`order_${orderId}`);
-//       console.log(`${role} joined order ${orderId}`);
-//     });
-
-//     socket.on("update_location", ({ orderId, location }) => {
-//       if (role !== "driver") return;
-
-//       // Broadcast to customer in the order room
-//       io.to(`order_${orderId}`).emit("driver_location_update", {
-//         driverId: id,
-//         location
-//       });
-//     });
-
-//     socket.on("delivery_completed", ({ orderId }) => {
-//       if (role !== "driver") return;
-
-//       // Notify restaurant (via backend trigger or event)
-//       io.to(`order_${orderId}`).emit("delivery_done", {
-//         orderId,
-//         driverId: id
-//       });
-
-//       // Optionally: remove users from the room
-//       socket.leave(`order_${orderId}`);
-//     });
-
-//     socket.on("disconnect", () => {
-//       console.log(`${role} disconnected: ${id}`);
-//     });
-//   });
-// };
 
 const socketService = {
   initSocketServer,
