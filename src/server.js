@@ -18,6 +18,6 @@ const app = express();
 const server = http.createServer(app);
 initSocketServer(server);
 
-server.listen(process.env.PORT || 5005, () => {
+server.listen(process.env.PORT || 5006, () => {
   console.log("Server running...");
 });
